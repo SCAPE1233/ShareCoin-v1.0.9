@@ -1,0 +1,63 @@
+
+@import 'react-toastify/dist/ReactToastify.css';
+:root {
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+  font-family: Arial, Helvetica, sans-serif;
+}
+/* Ensure header spans full width and has a black background */
+header {
+  width: 100%;
+  background: black;
+  padding: 15px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 20px;
+}
+
+/* Logo should be properly sized */
+.logo {
+  width: 50px; /* Adjust as needed */
+  height: auto;
+}
+
+/* Navbar links styling */
+nav {
+  display: flex;
+  gap: 20px;
+}
+
+nav a {
+  font-size: 1.5rem; /* Increase font size */
+  color: white;
+  text-decoration: none;
+  transition: color 0.3s;
+}
+
+nav a:hover {
+  color: #00c3ff; /* Light blue hover effect */
+}
+
+/* In your global CSS file */
+.Toastify__toast {
+  font-size: 25px !important;
+  padding: 1rem !important;
+}
