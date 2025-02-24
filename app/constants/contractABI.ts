@@ -22,7 +22,7 @@ export const ERC20_ABI = [
 // 2) ShareCoin Contract
 //    (Your unified subscription + mining + ERC20 contract.)
 //
-export const SHARECOIN_ADDRESS = "0xB6710FEED1c139C8e40cB73499e2e20E25EBE284";
+export const SHARECOIN_ADDRESS = "0x66109699EaebC93c9Df7ce3c3342AEbC009E2896";
 export const SHARECOIN_ABI = [
   // Subscription-related
   "function subscriptionActiveFor(address user) view returns (bool)",

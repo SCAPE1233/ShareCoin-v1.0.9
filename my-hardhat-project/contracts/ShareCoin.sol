@@ -7,52 +7,47 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 /**
  * @title ShareCoin
- * @notice Example of a single contract that:
- *   1) Is an ERC20 token w/ 21M max supply,
- *   2) Allows day-based subscriptions (Basic/Standard/Premium) OR a limited (max 50) Lifetime plan,
- *   3) Provides simulated PoW via submitMinedBlock() or submitMultipleMinedBlocksAndMint().
+ * @notice Single contract that:
+ *   1) Is an ERC20 token (21M max supply),
+ *   2) Allows day-based subscriptions (Basic/Standard/Premium) or a limited-lifetime plan,
+ *   3) Provides both user-based and server-based mining calls.
  */
 contract ShareCoin is ERC20, Ownable, ReentrancyGuard {
     // --------------------------
     // 1) ERC20 Setup
     // --------------------------
     uint256 public constant MAX_SUPPLY   = 21_000_000 * 10**18; // 21M max
-    uint256 public constant BLOCK_REWARD = 50 * 10**18;         // 50 SHR per block
+    uint256 public constant BLOCK_REWARD = 50 * 10**18;         // 50 SHARE per block
+
+    // Payment token (e.g. USDC, TDAI, etc.) used for subscriptions
+    ERC20 public paymentToken;
 
     // Example token logo URL
     string public tokenLogoURI;
 
-    // Payment token for subscriptions (e.g. USDC).
-    ERC20 public paymentToken;
-
-    // (No real difficulty check if you don't want it.)
+    // (Optional) difficulty-related settings
     uint256 public defaultDifficulty = 0;
-
-    // If you want confirmations, set >0
     uint256 public confirmationThreshold = 0;
 
     // --------------------------
-    // 2) Subscription Manager
+    // 2) Subscription Management
     // --------------------------
     enum PlanType { None, Basic, Standard, Premium, Lifetime }
 
-    // user => subscription expiry (block.timestamp + N seconds), or type(uint256).max for lifetime
+    // user => subscription expiry (timestamp)
     mapping(address => uint256) public subscriptions;
-
-    // user => last plan purchased (for reference)
+    // user => last plan purchased
     mapping(address => PlanType) public userPlan;
 
-    // For lifetime: max 50 total
+    // Lifetime plan limit
     uint256 public lifetimeLimit = 50;
     uint256 public lifetimeSold;
 
-    // Hard-coded daily rates, e.g. Basic=20/day, Standard=40, Premium=60
+    // Hard-coded daily rates
     uint256 public basicDailyRate    = 20  * 10**18;
     uint256 public standardDailyRate = 40  * 10**18;
     uint256 public premiumDailyRate  = 60  * 10**18;
-
-    // Hard-coded lifetime price, e.g. 5000 tokens
-    uint256 public lifetimePrice     = 5000 * 10**18;
+    uint256 public lifetimePrice     = 8000 * 10**18;
 
     // Events
     event SubscriptionPurchased(address indexed user, PlanType plan, uint256 expiry);
@@ -72,7 +67,10 @@ contract ShareCoin is ERC20, Ownable, ReentrancyGuard {
     }
     MinedBlock[] public blockHistory;
 
-    // NEW: Track which (miner, blockNumber) was already used
+    /**
+     * @dev Marked "public" so the server or front-end can read it directly.
+     *      This auto-generates a getter named blockAlreadyUsed(address,uint256).
+     */
     mapping(address => mapping(uint256 => bool)) public blockAlreadyUsed;
 
     // Mining events
@@ -82,26 +80,25 @@ contract ShareCoin is ERC20, Ownable, ReentrancyGuard {
     // --------------------------
     // Constructor
     // --------------------------
+    /**
+     * @dev The `_paymentToken` is the address of the ERC20 token used for subscription payments.
+     *      The deployer becomes the owner (via Ownable(msg.sender)).
+     */
     constructor(address _paymentToken)
-        ERC20("ShareCoin", "SHR")
+        ERC20("ShareCoin", "SHARE")
         Ownable(msg.sender)
         ReentrancyGuard()
     {
-        // Hard-coded payment token address
+        // Set the subscription payment token (adjust if needed)
         paymentToken = ERC20(_paymentToken);
 
-        // Example token logo URI
+        // Example token logo URI (optional)
         tokenLogoURI = "https://roostintheroost.mypinata.cloud/ipfs/bafkreiddwmryxzc5xd6ajs4c7nrwl274vq3tfscfa3orc5ockfz";
     }
 
     // --------------------------
     // Purchase Subscription
     // --------------------------
-    /**
-     * @dev Buy a day-based subscription for (Basic/Standard/Premium).
-     * @param plan The plan enum: Basic=1,Standard=2,Premium=3
-     * @param daysCount The number of days to purchase (e.g. 3,14,30,90).
-     */
     function purchaseSubscription(PlanType plan, uint256 daysCount) external nonReentrant {
         require(
             plan == PlanType.Basic ||
@@ -112,61 +109,42 @@ contract ShareCoin is ERC20, Ownable, ReentrancyGuard {
         require(daysCount > 0, "daysCount=0?");
         require(!subscriptionActiveFor(msg.sender), "Already subscribed");
 
-        // 1) compute total price
         uint256 dailyRate;
         if (plan == PlanType.Basic)    dailyRate = basicDailyRate;
         if (plan == PlanType.Standard) dailyRate = standardDailyRate;
         if (plan == PlanType.Premium)  dailyRate = premiumDailyRate;
 
-        // daysCount * dailyRate
         uint256 totalPrice = dailyRate * daysCount;
-
-        // Transfer tokens
         bool success = paymentToken.transferFrom(msg.sender, address(this), totalPrice);
         require(success, "Payment failed");
 
-        // set subscription expiry
-        uint256 durationSeconds = daysCount * 1 days; // 86400
-        uint256 expiry = block.timestamp + durationSeconds;
+        uint256 expiry = block.timestamp + (daysCount * 1 days);
         subscriptions[msg.sender] = expiry;
         userPlan[msg.sender] = plan;
 
         emit SubscriptionPurchased(msg.sender, plan, expiry);
     }
 
-    /**
-     * @dev Purchase a lifetime plan, limited to 50 total.
-     */
     function purchaseLifetimeSubscription() external nonReentrant {
         require(lifetimeSold < lifetimeLimit, "Lifetime limit reached");
         require(!subscriptionActiveFor(msg.sender), "Already subscribed");
 
-        // Transfer lifetime price
         bool success = paymentToken.transferFrom(msg.sender, address(this), lifetimePrice);
         require(success, "Payment failed");
 
-        // Mark sub as infinite
+        // Mark subscription as effectively infinite
         subscriptions[msg.sender] = type(uint256).max;
         userPlan[msg.sender] = PlanType.Lifetime;
 
         lifetimeSold++;
-
         emit LifetimeSubscriptionPurchased(msg.sender);
     }
 
-    /**
-     * @dev Check if user is currently subscribed.
-     */
     function subscriptionActiveFor(address user) public view returns (bool) {
         return subscriptions[user] > block.timestamp;
     }
 
-    // --------------------------
-    // EXTRA HELPER: getSubscriptionInfo
-    // --------------------------
-    /**
-     * @dev Return a user's current subscription plan, expiry, and active boolean.
-     */
+    // For the front end to read all subscription data
     function getSubscriptionInfo(address user)
         external
         view
@@ -187,12 +165,10 @@ contract ShareCoin is ERC20, Ownable, ReentrancyGuard {
     }
 
     // --------------------------
-    // Single-Block Submit (old)
+    // Submit Mined Blocks (User)
     // --------------------------
     function submitMinedBlock(uint256 _blockNumber, uint256 nonce) external {
         require(subscriptionActiveFor(msg.sender), "Subscription expired");
-
-        // NEW: revert if same (miner, blockNumber) was already used
         require(!blockAlreadyUsed[msg.sender][_blockNumber], "Block already used!");
         blockAlreadyUsed[msg.sender][_blockNumber] = true;
 
@@ -209,48 +185,84 @@ contract ShareCoin is ERC20, Ownable, ReentrancyGuard {
         emit BlockMined(_blockNumber, computedHash, msg.sender);
     }
 
-    // --------------------------
-    // Multi-Block Submit + AutoMint
-    // --------------------------
     function submitMultipleMinedBlocksAndMint(
-        uint256[] calldata _blockNumbers,
+        uint256[] calldata blockNumbers,
         uint256[] calldata nonces
     ) external nonReentrant {
         require(subscriptionActiveFor(msg.sender), "Subscription expired");
-        require(_blockNumbers.length == nonces.length, "Array length mismatch");
+        require(blockNumbers.length == nonces.length, "Array mismatch");
 
-        for (uint256 i = 0; i < _blockNumbers.length; i++) {
-            // NEW: revert if same (miner, blockNumber) was already used
-            require(!blockAlreadyUsed[msg.sender][_blockNumbers[i]], "Block already used!");
-            blockAlreadyUsed[msg.sender][_blockNumbers[i]] = true;
+        for (uint256 i = 0; i < blockNumbers.length; i++) {
+            uint256 blockNum = blockNumbers[i];
+            require(!blockAlreadyUsed[msg.sender][blockNum], "Block already used!");
+            blockAlreadyUsed[msg.sender][blockNum] = true;
 
             bytes32 computedHash = keccak256(
-                abi.encodePacked(_blockNumbers[i], msg.sender, nonces[i])
+                abi.encodePacked(blockNum, msg.sender, nonces[i])
             );
 
             blockHistory.push(MinedBlock({
-                blockNumber: _blockNumbers[i],
+                blockNumber: blockNum,
                 blockHash: computedHash,
                 miner: msg.sender,
                 timestamp: block.timestamp,
-                claimed: true // auto-claimed
+                claimed: true
             }));
 
+            // Mint block reward
             uint256 newSupply = totalSupply() + BLOCK_REWARD;
             require(newSupply <= MAX_SUPPLY, "Max supply exceeded");
             _mint(msg.sender, BLOCK_REWARD);
 
-            emit BlockMined(_blockNumbers[i], computedHash, msg.sender);
-            emit RewardClaimed(_blockNumbers[i], msg.sender, BLOCK_REWARD);
+            emit BlockMined(blockNum, computedHash, msg.sender);
+            emit RewardClaimed(blockNum, msg.sender, BLOCK_REWARD);
         }
     }
 
+    // --------------------------
+    // Server-based Submit & Mint
+    // --------------------------
+    function serverSubmitMultipleMinedBlocksAndMintOnBehalf(
+        address user,
+        uint256[] calldata blockNumbers,
+        uint256[] calldata nonces
+    ) external onlyOwner nonReentrant {
+        require(subscriptionActiveFor(user), "Subscription expired");
+        require(blockNumbers.length == nonces.length, "Array mismatch");
+
+        for (uint256 i = 0; i < blockNumbers.length; i++) {
+            uint256 blockNum = blockNumbers[i];
+            require(!blockAlreadyUsed[user][blockNum], "Block already used!");
+            blockAlreadyUsed[user][blockNum] = true;
+
+            bytes32 computedHash = keccak256(
+                abi.encodePacked(blockNum, user, nonces[i])
+            );
+
+            blockHistory.push(MinedBlock({
+                blockNumber: blockNum,
+                blockHash: computedHash,
+                miner: user,
+                timestamp: block.timestamp,
+                claimed: true
+            }));
+
+            uint256 newSupply = totalSupply() + BLOCK_REWARD;
+            require(newSupply <= MAX_SUPPLY, "Max supply exceeded");
+            _mint(user, BLOCK_REWARD);
+
+            emit BlockMined(blockNum, computedHash, user);
+            emit RewardClaimed(blockNum, user, BLOCK_REWARD);
+        }
+    }
+
+    // Return how many blocks exist, so front end can display “BlockHeight”
     function getBlockHistoryLength() external view returns (uint256) {
         return blockHistory.length;
     }
 
     // --------------------------
-    //  Claim Reward (Old)
+    // Claim Rewards (Older Style)
     // --------------------------
     function claimReward(uint256 index) external nonReentrant {
         require(index < blockHistory.length, "Invalid index");
@@ -269,10 +281,10 @@ contract ShareCoin is ERC20, Ownable, ReentrancyGuard {
 
     function claimMultipleRewards(uint256[] calldata indexes) external nonReentrant {
         for (uint256 i = 0; i < indexes.length; i++) {
-            uint256 index = indexes[i];
-            require(index < blockHistory.length, "Invalid index");
+            uint256 idx = indexes[i];
+            require(idx < blockHistory.length, "Invalid index");
 
-            MinedBlock storage minedBlock = blockHistory[index];
+            MinedBlock storage minedBlock = blockHistory[idx];
             require(minedBlock.miner == msg.sender, "Not the miner");
             require(!minedBlock.claimed, "Already claimed");
 
@@ -287,7 +299,7 @@ contract ShareCoin is ERC20, Ownable, ReentrancyGuard {
     }
 
     // --------------------------
-    //  Adjust Difficulty (opt)
+    // (Optional) Adjust Difficulty
     // --------------------------
     function setDifficulty(uint256 newDifficulty) external onlyOwner {
         defaultDifficulty = newDifficulty;

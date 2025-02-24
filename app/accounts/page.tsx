@@ -21,7 +21,7 @@ export const ERC20_ABI = [
 ];
 
 // 1) New contract address:
-export const SHARECOIN_ADDRESS = "0xB6710FEED1c139C8e40cB73499e2e20E25EBE284";
+export const SHARECOIN_ADDRESS = "0x66109699EaebC93c9Df7ce3c3342AEbC009E2896";
 export const SHARECOIN_ABI = [
   // Subscription
   "function subscriptionActiveFor(address user) view returns (bool)",
@@ -52,8 +52,8 @@ export const SHARECOIN_ABI = [
   "function allowance(address owner, address spender) view returns (uint256)",
 ];
 
-// If you're using the Node server for your simulation:
 const MINING_SERVER_URL = "http://localhost:3001";
+//const MINING_SERVER_URL = "http://18.215.230.251:3001";
 
 /** =========== 2) Types & Utils =========== **/
 
@@ -115,6 +115,7 @@ function formatTimeLeft(seconds: number): string {
   return parts.join(" ") || "Expired";
 }
 
+/** =========== The Single Default Export =========== **/
 export default function AccountsPage() {
   /************************************************
    *  A) On-Chain Subscription State
@@ -148,8 +149,8 @@ export default function AccountsPage() {
   const [hashRate, setHashRate] = useState(0);
   const [pendingBlocks, setPendingBlocks] = useState<any[]>([]);
 
-  // NEW: track isMinting to disable the button while TX is pending
-  
+  // Track whether we are currently minting
+  //const [isMinting, setIsMinting] = useState(false);
 
   /************************************************
    *  C) Connect MetaMask on Mount
@@ -408,71 +409,79 @@ export default function AccountsPage() {
   /************************************************
    *  L) Submit & Mint (on-chain)
    ***********************************************/
+
   const [isMinting, setIsMinting] = useState(false);
-
-
-  
-  async function handleBatchSubmit() {
-    if (!pendingBlocks.length) {
-      toast.info("No pending blocks to submit.");
-      return;
-    }
-    setIsMinting(true);
-    try {
-      const provider = new ethers.BrowserProvider((window as any).ethereum);
-      const signer = await provider.getSigner();
-      const shareCoin = new ethers.Contract(SHARECOIN_ADDRESS, SHARECOIN_ABI, signer);
-  
-      const blockNumbers = pendingBlocks.map((b) => b.blockNumber);
-      const nonces = pendingBlocks.map((b) => b.nonce);
-  
-      toast.info(`Submitting ${pendingBlocks.length} blocks...`);
-      const tx = await shareCoin.submitMultipleMinedBlocksAndMint(blockNumbers, nonces);
-      await tx.wait();
-  
-      toast.success("Batch blocks submitted & minted!");
-  
-      // 1) Clear from local state
-      setPendingBlocks([]);
-  
-      // 2) Tell the server to remove them
-      const body = { userAddress: account, blockNumbers };
-      await fetch(`${MINING_SERVER_URL}/api/clearMinedBlocks`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-  
-      // 3) Refresh the user’s on-chain balance (or subscription info, etc.)
-      await refreshUserBalance();
-      // or loadSubscriptionInfo() if you want to re-check subscription status
-  
-    } catch (err: any) {
-      console.error("handleBatchSubmit error:", err);
-      toast.error(`Batch submit failed: ${err.message || err.toString()}`);
-    } finally {
-      setIsMinting(false);
-    }
+async function handleBatchSubmit() {
+  if (!pendingBlocks.length) {
+    toast.info("No pending blocks to submit.");
+    return;
   }
+  setIsMinting(true);
+  try {
+    const provider = new ethers.BrowserProvider((window as any).ethereum);
+    const signer = await provider.getSigner();
+    const shareCoin = new ethers.Contract(SHARECOIN_ADDRESS, SHARECOIN_ABI, signer);
+
+    const blockNumbers = pendingBlocks.map((b) => b.blockNumber);
+    const nonces = pendingBlocks.map((b) => b.nonce);
+
+    toast.info(`Submitting ${pendingBlocks.length} blocks...`);
+    const tx = await shareCoin.submitMultipleMinedBlocksAndMint(blockNumbers, nonces);
+    await tx.wait();
+
+    toast.success("Batch blocks submitted & minted!");
+
+    // 1) Clear from local state
+    setPendingBlocks([]);
+
+    // 2) Tell the server to remove them
+    const body = { userAddress: account.toLowerCase(), blockNumbers };
+    await fetch(`${MINING_SERVER_URL}/api/clearMinedBlocks`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+    // 3) Refresh the user’s on-chain balance
+    await refreshUserBalance();
+  } catch (err: any) {
+    console.error("handleBatchSubmit error:", err);
+    toast.error(`Batch submit failed: ${err.message || err.toString()}`);
+  } finally {
+    setIsMinting(false);
+  }
+}
 
 
   /************************************************
    *  M) Fake “Network” Stats
    ***********************************************/
+
   useEffect(() => {
-    const timer = setInterval(() => {
-      setNetworkHashRate(Math.floor(50 + Math.random() * 100) + " MH/s");
+    const timer = setInterval(async () => {
+      try {
+        // 1) Fetch the real total from your server
+        const res = await fetch(`${MINING_SERVER_URL}/api/networkHashRate`);
+        const data = await res.json();
+  
+        // 2) data.networkHashRate is the sum from the server
+        setNetworkHashRate(`${data.networkHashRate} H/s`);
+      } catch (err) {
+        console.error("Failed to fetch network hash rate:", err);
+      }
+  
+      // If you still want a real or approximate block time logic:
       if (onChainBlockCount >= 2) {
         setAverageBlockTime((8 + Math.random() * 4).toFixed(0) + " sec");
       }
     }, 15000);
+  
     return () => clearInterval(timer);
   }, [onChainBlockCount]);
 
   /************************************************
    *  Render
    ***********************************************/
-  // Convert numeric plan to text
   const planName = getPlanName(userPlanEnum);
 
   return (
@@ -615,18 +624,18 @@ export default function AccountsPage() {
 
           {pendingBlocks.map((b: any, idx) => (
             <div key={idx} style={styles.largeText}>
-              <span style={styles.textWhite}>Block #  </span>
-              <span style={styles.textWhite}> {b.blockNumber}</span>
+              <span style={styles.textWhite}>Block # </span>
+              <span style={styles.textWhite}>{b.blockNumber}</span>
 
-              <span style={styles.textGreen}>: 50 </span>
+              <span style={styles.textGreen}> : 50</span>
               <span style={styles.textYellow}> SHARE</span>
 
-              <span style={styles.textWhite}> :N  </span>
+              <span style={styles.textWhite}> :N </span>
               <span style={styles.textYellow}>{b.nonce}</span>
 
               <span style={styles.textWhite}> :Hash </span>
               <span style={styles.textGreen}>
-              {b.localHash.slice(0, 46)}
+                {b.localHash.slice(0, 46)}
               </span>
 
               <span style={styles.textWhite}> : </span>
