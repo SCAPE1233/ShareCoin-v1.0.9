@@ -41,6 +41,8 @@ const minerStates = {};
  * 3) Helper Functions
  ********************************************/
 function getFindProbability(plan) {
+  // Probability of discovering a block in our synthetic mining environment
+  // Basic=1, Standard=2, Premium=3, Lifetime=4
   switch (plan) {
     case 1: // Basic
       return 1 / 610;
@@ -48,16 +50,21 @@ function getFindProbability(plan) {
       return 1 / 480;
     case 3: // Premium
       return 1 / 360;
+    case 4: // Lifetime
+      // Same find probability as Premium, or whichever you prefer
+      return 1 / 360;
     default:
       return 0;
   }
 }
 
 function getPlanHashRate(plan) {
+  // Return the displayed hash rate for the plan
   switch (plan) {
-    case 1: return 500;
-    case 2: return 2000;
-    case 3: return 5000;
+    case 1: return 500;   // Basic
+    case 2: return 2000;  // Standard
+    case 3: return 5000;  // Premium
+    case 4: return 5555;  // Lifetime
     default: return 0;
   }
 }
@@ -116,7 +123,6 @@ app.get("/api/networkHashRate", (req, res) => {
 app.post("/api/startMining", async (req, res) => {
   try {
     const userAddress = (req.body.userAddress || "").toLowerCase();
-    const { plan } = req.body;
     if (!userAddress) {
       return res.status(400).json({ error: "Missing userAddress" });
     }
@@ -127,19 +133,19 @@ app.post("/api/startMining", async (req, res) => {
       return res.status(403).json({ error: "No active subscription on-chain." });
     }
 
-    // 3) Plan verification: read plan from contract to ensure user is telling truth
+    // 3) Verify plan from contract
     const onChainPlanBN = await shareCoin.userPlan(userAddress);
-    const onChainPlan = Number(onChainPlanBN); // 1=Basic,2=Standard,3=Premium etc.
-    if (onChainPlan < 1 || onChainPlan > 3) {
+    const onChainPlan = Number(onChainPlanBN); // 1=Basic,2=Standard,3=Premium,4=Lifetime
+    if (onChainPlan < 1 || onChainPlan > 4) {
       // e.g. plan 0 or out of range
       return res.status(403).json({ error: "Invalid plan on-chain." });
     }
 
-    // Now we trust onChainPlan as the real plan
+    // Initialize or update miner state
     if (!minerStates[userAddress]) {
       minerStates[userAddress] = {
         active: false,
-        plan: onChainPlan, // use the contract's plan
+        plan: onChainPlan,
         hashAttempts: 0,
         blocksFound: [],
       };
@@ -259,8 +265,6 @@ setInterval(async () => {
   }
 
   // 4) Periodic chainNextBlockNumber sync
-  // Here, every iteration or every X times, re-sync from contract
-  // to ensure we stay in sync if anything else minted or if server restarted
   try {
     const lengthBN = await shareCoin.getBlockHistoryLength();
     chainNextBlockNumber = Number(lengthBN);

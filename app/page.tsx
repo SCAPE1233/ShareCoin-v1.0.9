@@ -317,7 +317,7 @@ export default function Page() {
     const interval = setInterval(async () => {
       if (!account) return;
       try {
-        const res = await fetch(`${MINING_SERVER_URL}/api/minerStats?userAddress=${account}`);
+        const res = await fetch(`${MINING_SERVER_URL}/minerStats?userAddress=${account}`)
         const data = await res.json();
         setMinerActive(data.active);
         setMinerPlan(data.plan);
@@ -346,7 +346,7 @@ export default function Page() {
     try {
       const body = { userAddress: account, plan: Number(userPlanEnum) };
 
-      const res = await fetch(`${MINING_SERVER_URL}/api/startMining`, {
+      const res = await fetch(`${MINING_SERVER_URL}/startMining`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -367,7 +367,7 @@ export default function Page() {
       return;
     }
     try {
-      const res = await fetch(`${MINING_SERVER_URL}/api/stopMining`, {
+      const res = await fetch(`${MINING_SERVER_URL}/stopMining`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userAddress: account }),
@@ -407,7 +407,7 @@ export default function Page() {
 
       setPendingBlocks([]);
       const body = { userAddress: account.toLowerCase(), blockNumbers };
-      await fetch(`${MINING_SERVER_URL}/api/clearMinedBlocks`, {
+      await fetch(`${MINING_SERVER_URL}/clearMinedBlocks`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -429,7 +429,7 @@ export default function Page() {
   useEffect(() => {
     const timer = setInterval(async () => {
       try {
-        const res = await fetch(`${MINING_SERVER_URL}/api/networkHashRate`);
+        const res = await fetch(`${MINING_SERVER_URL}/networkHashRate`);
         const data = await res.json();
         setNetworkHashRate(`${data.networkHashRate} H/s`);
       } catch (err) {
@@ -444,7 +444,7 @@ export default function Page() {
   useEffect(() => {
     const timer = setInterval(async () => {
       try {
-        const res = await fetch(`${MINING_SERVER_URL}/api/averageBlockTime`);
+        const res = await fetch(`${MINING_SERVER_URL}/averageBlockTime`);
         const data = await res.json();
         setAverageBlockTime(data.average);
       } catch (err) {
@@ -456,7 +456,7 @@ export default function Page() {
     // initial fetch
     (async () => {
       try {
-        const res = await fetch(`${MINING_SERVER_URL}/api/averageBlockTime`);
+        const res = await fetch(`${MINING_SERVER_URL}/averageBlockTime`);
         const data = await res.json();
         setAverageBlockTime(data.average);
       } catch (err) {
