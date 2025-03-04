@@ -20,7 +20,7 @@ module.exports = {
   },
   networks: {
     pulsechainTestnet: {
-      url: process.env.PULSECHAIN_RPC, // e.g., "https://pulsechain-testnet-rpc.publicnode.com"
+      url: process.env.PULSECHAIN_RPC, // e.g., "https://pulsechain-rpc.publicnode.com"
       chainId: Number(process.env.PULSECHAIN_CHAIN_ID) || 943,
       gas: Number(process.env.PULSECHAIN_GAS_LIMIT) || 30000000,
       accounts: process.env.PULSECHAIN_PRIVATE_KEY ? [process.env.PULSECHAIN_PRIVATE_KEY] : [],
@@ -38,8 +38,8 @@ module.exports = {
         network: "pulsechainTestnet",
         chainId: 943,
         urls: {
-          apiURL: "https://api-testnet.pulsechain.com/api", // If different, adjust
-          browserURL: "https://testnet.pulsechain.com",       // If different, adjust
+          apiURL: "https://pulsechain-beacon-api.publicnode.com", // If different, adjust
+          browserURL: "https://pulsechain-rpc.publicnode.com",       // If different, adjust
         },
       },
     ],

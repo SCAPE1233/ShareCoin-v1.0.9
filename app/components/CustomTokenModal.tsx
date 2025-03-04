@@ -2,8 +2,8 @@
 
 import React, { useState } from "react";
 import { ethers } from "ethers";
-import type { Token } from "../app/trade/page"; // Adjust the path as needed
-import { ERC20_ABI } from "../constants/contractABI";
+//import type { Token } from "../app/trade/page"; // Adjust the path as needed
+//import { ERC20_ABI } from "../constants/contractABI";
 
 interface CustomTokenModalProps {
   onAdd: (token: Token) => void;

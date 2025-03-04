@@ -3,7 +3,7 @@
 //
 // 1) Payment Token (e.g. tDAI) for subscriptions
 //
-export const PAYMENT_TOKEN_ADDRESS = "0x826e4e896CC2f5B371Cd7Bb0bd929DB3e3DB67c0";
+export const PAYMENT_TOKEN_ADDRESS = "0xefD766cCb38EaF1dfd701853BFCe31359239F305";
 
 // Minimal / complete ERC20 ABI for your payment token
 export const ERC20_ABI = [
@@ -22,7 +22,7 @@ export const ERC20_ABI = [
 // 2) ShareCoin Contract
 //    (Your unified subscription + mining + ERC20 contract.)
 //
-export const SHARECOIN_ADDRESS = "0x66109699EaebC93c9Df7ce3c3342AEbC009E2896";
+export const SHARECOIN_ADDRESS = "0x03EA2507C5cAF3E75B7D417b5ACfE6dfA0beBAa1";
 export const SHARECOIN_ABI = [
   // Subscription-related
   "function subscriptionActiveFor(address user) view returns (bool)",

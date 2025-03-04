@@ -1,27 +1,32 @@
 /********************************************************************
- * server.js - Example server-based mining simulation for ShareCoin,
- *     rolling average block time, and a cron job every 15 min.
+ * server.js - Enhanced server-based mining for ShareCoin,
+ * with rate limit, plan verification, & chainNextBlockNumber sync
  ********************************************************************/
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const { ethers } = require("ethers");
 const cron = require("node-cron");
+// 1) Rate limiting package
+const rateLimit = require("express-rate-limit");
 
 /********************************************
  * 1) CONFIG
  ********************************************/
 const RPC_URL = process.env.PULSECHAIN_RPC || "http://127.0.0.1:8545";
-const SHARECOIN_ADDRESS = "0x66109699EaebC93c9Df7ce3c3342AEbC009E2896";
+const SHARECOIN_ADDRESS = "0x03EA2507C5cAF3E75B7D417b5ACfE6dfA0beBAa1";
 const SHARECOIN_ABI = [
-  // Must include a way to check if block is used
   "function blockAlreadyUsed(address,uint256) view returns (bool)",
   "function getBlockHistoryLength() view returns (uint256)",
   "function subscriptionActiveFor(address user) view returns (bool)",
+  // For plan verification:
+  "function userPlan(address user) view returns (uint256)",
+
   "function serverSubmitMultipleMinedBlocksAndMintOnBehalf(address user, uint256[] blockNumbers, uint256[] nonces) external",
 ];
 const OWNER_PRIVATE_KEY = process.env.PULSECHAIN_PRIVATE_KEY;
 
+// We'll create provider, signer, and contract references in initChainBlockNumber
 let provider;
 let serverSigner;
 let shareCoin;
@@ -31,14 +36,6 @@ let chainNextBlockNumber = 0;
  * 2) Data Structures
  ********************************************/
 const minerStates = {};
-/*
-minerStates["0xUserAddress"] = {
-  active: false,
-  plan: 1, // Basic=1, Standard=2, Premium=3
-  hashAttempts: 0,
-  blocksFound: [...]
-};
-*/
 
 /********************************************
  * 3) Helper Functions
@@ -46,7 +43,7 @@ minerStates["0xUserAddress"] = {
 function getFindProbability(plan) {
   switch (plan) {
     case 1: // Basic
-      return 1 / 10;
+      return 1 / 610;
     case 2: // Standard
       return 1 / 480;
     case 3: // Premium
@@ -93,6 +90,15 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// 1) Rate limiting - limit to 200 requests / 5 minutes as example
+const limiter = rateLimit({
+  windowMs: 5 * 60 * 1000, // 5 minutes
+  max: 200, // 200 requests per 5 minutes
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use(limiter);
+
 /********************************************
  * 6) Routes
  ********************************************/
@@ -115,25 +121,35 @@ app.post("/api/startMining", async (req, res) => {
       return res.status(400).json({ error: "Missing userAddress" });
     }
 
-    // Check subscription
+    // 2) Check subscription
     const subscribed = await shareCoin.subscriptionActiveFor(userAddress);
     if (!subscribed) {
       return res.status(403).json({ error: "No active subscription on-chain." });
     }
 
+    // 3) Plan verification: read plan from contract to ensure user is telling truth
+    const onChainPlanBN = await shareCoin.userPlan(userAddress);
+    const onChainPlan = Number(onChainPlanBN); // 1=Basic,2=Standard,3=Premium etc.
+    if (onChainPlan < 1 || onChainPlan > 3) {
+      // e.g. plan 0 or out of range
+      return res.status(403).json({ error: "Invalid plan on-chain." });
+    }
+
+    // Now we trust onChainPlan as the real plan
     if (!minerStates[userAddress]) {
       minerStates[userAddress] = {
         active: false,
-        plan: plan || 1,
+        plan: onChainPlan, // use the contract's plan
         hashAttempts: 0,
         blocksFound: [],
       };
+    } else {
+      minerStates[userAddress].plan = onChainPlan;
     }
+
     minerStates[userAddress].active = true;
-    if (plan) {
-      minerStates[userAddress].plan = plan;
-    }
-    return res.json({ success: true });
+
+    return res.json({ success: true, verifiedPlan: onChainPlan });
   } catch (err) {
     console.error("startMining error:", err);
     return res.status(500).json({ error: err.toString() });
@@ -167,6 +183,7 @@ app.get("/api/minerStats", (req, res) => {
     hashAttempts: state.hashAttempts,
     blocksFound: state.blocksFound,
     hashRate,
+    pendingCount: state.blocksFound.length,
   });
 });
 
@@ -240,7 +257,17 @@ setInterval(async () => {
     }
     data.hashAttempts++;
   }
-}, 10000); // Changed from 2s to 10s
+
+  // 4) Periodic chainNextBlockNumber sync
+  // Here, every iteration or every X times, re-sync from contract
+  // to ensure we stay in sync if anything else minted or if server restarted
+  try {
+    const lengthBN = await shareCoin.getBlockHistoryLength();
+    chainNextBlockNumber = Number(lengthBN);
+  } catch (err) {
+    console.error("Error re-syncing chainNextBlockNumber:", err);
+  }
+}, 10000); // runs every 10s
 
 /********************************************
  * 8) Cron Job - runs every 15 minutes
@@ -264,7 +291,6 @@ cron.schedule("*/15 * * * *", async () => {
       }
 
       if (!freshBlocks.length) {
-        // All blocks were used, nothing fresh to mint
         continue;
       }
 

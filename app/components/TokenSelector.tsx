@@ -1,6 +1,6 @@
 // components/TokenSelector.tsx
 import React from "react";
-import { Token } from "../pages/trade"; // Adjust the import path as needed
+//import { Token } from "../pages/trade"; // Adjust the import path as needed
 
 interface TokenSelectorProps {
   tokens: Token[];

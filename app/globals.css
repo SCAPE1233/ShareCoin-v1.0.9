@@ -1,63 +1,80 @@
-
-@import 'react-toastify/dist/ReactToastify.css';
-:root {
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
-body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
-}
-/* Ensure header spans full width and has a black background */
-header {
-  width: 100%;
-  background: black;
-  padding: 15px 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 20px;
-}
-
-/* Logo should be properly sized */
-.logo {
-  width: 50px; /* Adjust as needed */
-  height: auto;
-}
-
-/* Navbar links styling */
-nav {
-  display: flex;
-  gap: 20px;
-}
-
-nav a {
-  font-size: 1.5rem; /* Increase font size */
-  color: white;
-  text-decoration: none;
-  transition: color 0.3s;
-}
-
-nav a:hover {
-  color: #00c3ff; /* Light blue hover effect */
-}
-
-/* In your global CSS file */
-.Toastify__toast {
-  font-size: 25px !important;
-  padding: 1rem !important;
-}
+/* ========================================
+   1) Imports for Toastify & Tailwind
+   ======================================== */
+   @import 'react-toastify/dist/ReactToastify.css';
+   @tailwind base;
+   @tailwind components;
+   @tailwind utilities;
+   
+   /* ========================================
+      2) Force Black/White Color Scheme
+      ======================================== */
+   :root {
+     /* We match your tailwind.config.js color vars */
+     --background: #000000;
+     --foreground: #ffffff;
+   }
+   
+   /* Remove any "prefers-color-scheme" usage
+      that might flip you to white in light mode. */
+   
+   /* Ensure HTML & body fill the screen and 
+      apply black background with white text */
+   html, body {
+     margin: 0;
+     padding: 0;
+     background: var(--background);
+     color: var(--foreground);
+     font-family: Arial, Helvetica, sans-serif;
+   }
+   
+   /* (Optional) Slightly larger text on small devices */
+   @media (max-width: 480px) {
+     body {
+       font-size: 1.1rem;
+     }
+   }
+   
+   /* ========================================
+      3) Header & Nav
+      ======================================== */
+   header {
+     width: 100%;
+     background: #000000; /* ensure it's black */
+     padding: 10px 20px; 
+     display: flex;
+     align-items: center;
+     justify-content: space-between;
+   }
+   
+   /* Example logo sizing */
+   .logo {
+     width: 50px;
+     height: auto;
+   }
+   
+   /* Nav links */
+   nav {
+     display: flex;
+     gap: 20px;
+   }
+   
+   nav a {
+     font-size: 1.2rem;
+     color: var(--foreground);
+     text-decoration: none;
+     transition: color 0.3s;
+   }
+   
+   nav a:hover {
+     color: #00c3ff;
+   }
+   
+   /* ========================================
+      4) Toastify
+      ======================================== */
+   .Toastify__toast {
+     font-size: 1rem !important;
+     padding: 1rem !important;
+   }
+   

@@ -45,8 +45,8 @@ export interface Token {
       logo: "/tokens/usdc.png",
     },
     {
-      symbol: "SHR",
-      address: "0xc97da6E2EB93963Bde491568b99C84385481D75A", // Replace with your actual address
+      symbol: "Share",
+      address: "0x03EA2507C5cAF3E75B7D417b5ACfE6dfA0beBAa1", // Replace with your actual address
       decimals: 18,
       logo: "/tokens/Share.png",
     },
