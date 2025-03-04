@@ -68,7 +68,7 @@ const durationOptions = [
   { label: "30 days", value: 30 },
   { label: "90 days", value: 90 },
 ];
-const MINING_SERVER_URL = "http://18.215.230.251:3001"; 
+const MINING_SERVER_URL = "https://sharecoinmining.com/api";
 const MAX_SHARECOIN_SUPPLY = 21_000_000;
 
 /** === Main Page Component === **/

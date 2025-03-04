@@ -26,7 +26,7 @@ export default function AverageBlockTime() {
     const interval = setInterval(async () => {
       try {
         // Step 1) Fetch from your server, which returns { average: "6689.48" } or "N/A"
-        const res = await fetch("http://18.215.230.251:3001/api/averageBlockTime");
+        fetch("https://sharecoinmining.com/api/averageBlockTime");
         const data = await res.json(); // e.g. { average: "6689.48" }
 
         // Step 2) If it’s numeric, parse and convert to hh:mm:ss
@@ -51,7 +51,7 @@ export default function AverageBlockTime() {
     // Initial fetch once
     (async () => {
       try {
-        const res = await fetch("http://18.215.230.251:3001/api/averageBlockTime");
+        fetch("https://sharecoinmining.com/api/averageBlockTime");
         const data = await res.json();
         if (data.average === "N/A" || data.average === undefined) {
           setAverageBlockTime("N/A");
