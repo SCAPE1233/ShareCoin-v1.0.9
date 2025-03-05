@@ -37,10 +37,14 @@ function getPlanName(plan: PlanType): string {
 
 function getDailyRate(plan: PlanType): number {
   switch (plan) {
-    case PlanType.Basic:    return 20;
-    case PlanType.Standard: return 40;
-    case PlanType.Premium:  return 60;
-    default:                return 0;
+    case PlanType.Basic:
+      return 20;
+    case PlanType.Standard:
+      return 40;
+    case PlanType.Premium:
+      return 60;
+    default:
+      return 0;
   }
 }
 
@@ -61,6 +65,7 @@ function formatTimeLeft(seconds: number): string {
 }
 
 /** === 2) Constants === **/
+// The base URL includes one "/api"
 const lifetimePrice = 8000;
 const durationOptions = [
   { label: "3 days", value: 3 },
@@ -317,7 +322,8 @@ export default function Page() {
     const interval = setInterval(async () => {
       if (!account) return;
       try {
-        const res = await fetch(`${MINING_SERVER_URL}/minerStats?userAddress=${account}`)
+        // No extra "/api" here
+        const res = await fetch(`${MINING_SERVER_URL}/minerStats?userAddress=${account}`);
         const data = await res.json();
         setMinerActive(data.active);
         setMinerPlan(data.plan);
@@ -346,6 +352,7 @@ export default function Page() {
     try {
       const body = { userAddress: account, plan: Number(userPlanEnum) };
 
+      // Only "/startMining", not "/api/startMining"
       const res = await fetch(`${MINING_SERVER_URL}/startMining`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -367,6 +374,7 @@ export default function Page() {
       return;
     }
     try {
+      // POST /stopMining
       const res = await fetch(`${MINING_SERVER_URL}/stopMining`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -407,6 +415,7 @@ export default function Page() {
 
       setPendingBlocks([]);
       const body = { userAddress: account.toLowerCase(), blockNumbers };
+      // Clear mined blocks
       await fetch(`${MINING_SERVER_URL}/clearMinedBlocks`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -425,7 +434,7 @@ export default function Page() {
   /************************************************
    *  M) “Network” Stats
    ***********************************************/
-  // 1) Poll /api/networkHashRate
+  // 1) Poll /networkHashRate
   useEffect(() => {
     const timer = setInterval(async () => {
       try {
@@ -440,7 +449,7 @@ export default function Page() {
     return () => clearInterval(timer);
   }, [onChainBlockCount]);
 
-  // 2) Poll local block time from /api/averageBlockTime
+  // 2) Poll local block time from /averageBlockTime
   useEffect(() => {
     const timer = setInterval(async () => {
       try {
@@ -718,23 +727,22 @@ export default function Page() {
           <div className="bg-[#111] text-white p-6 rounded max-w-lg w-full mx-4">
             <h2 className="text-2xl mb-4">ShareCoin Mining Info</h2>
             <p className="text-lg mb-3 leading-relaxed">
-              
               1. Make sure you have a subscription active.<br />
               2. Click "Start Mining" in the Mining Controls panel.<br />
               3. Wait for blocks to appear under "Unclaimed Blocks".<br />
               4. Submit them to claim your rewards..<br />
               5. Buy a Cloud Mining Subscription Click it & Forget it.. Coins will be 
-                deposited in your wallet we run a mint function to all 
-                blocks Found every Hour. You can mint your found blocks or allow
-                Server to mint them. <br /> 
+                 deposited in your wallet we run a mint function to all 
+                 blocks Found every Hour. You can mint your found blocks or allow
+                 Server to mint them. <br /> 
               6. 21,000,000 SHARE coins total supply 50 SHARE per each Block found.<br />
               7. ShareCoin is a Meme Coin and has no value when mined other 
-              then Collectors Item.. It does not exist with out you creating it.. 
-              You will (mine it).. This is for Entertainment and 
-              Social Interactive Mining.. <br />
+                 than Collectors Item.. It does not exist without you creating it.. 
+                 You will (mine it).. This is for Entertainment and 
+                 Social Interactive Mining.. <br />
               General Info:<br />
               10. No mining equipment is required all mining Hash is done in the cloud 
-              server.  Have Fun Mining! <br />
+                 server.  Have Fun Mining! <br />
             </p>
             <button
               onClick={() => setShowHelpModal(false)}
@@ -750,3 +758,4 @@ export default function Page() {
     </div>
   );
 }
+

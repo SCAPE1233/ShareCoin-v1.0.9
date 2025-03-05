@@ -3,6 +3,7 @@
  * with rate limit, plan verification, & chainNextBlockNumber sync
  ********************************************************************/
 require("dotenv").config();
+console.log("KEY IS:", process.env.OWNER_PRIVATE_KEY);
 const express = require("express");
 const cors = require("cors");
 const { ethers } = require("ethers");
@@ -94,9 +95,10 @@ function getAverageBlockTimeSec() {
  * 5) Express Setup
  ********************************************/
 const app = express();
+app.set("trust proxy", 2);
+console.log("app.get('trust proxy') =", app.get('trust proxy'));
 app.use(cors());
 app.use(express.json());
-
 // 1) Rate limiting - limit to 200 requests / 5 minutes as example
 const limiter = rateLimit({
   windowMs: 5 * 60 * 1000, // 5 minutes

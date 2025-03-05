@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: 'export',
+  // output: 'export', // Remove or comment this line
   assetPrefix: './',
   trailingSlash: true,
   reactStrictMode: false,
@@ -12,3 +12,4 @@ const nextConfig = {
 };
 
 module.exports = nextConfig;
+
