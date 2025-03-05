@@ -74,10 +74,16 @@ const durationOptions = [
   { label: "30 days", value: 30 },
   { label: "90 days", value: 90 },
 ];
+
 // This base URL includes one "/api", so calls will become, e.g.,
 // https://sharecoinmining.com/api/minerStats
 const MINING_SERVER_URL = "https://sharecoinmining.com/api";
+
+// Maximum supply used for a front-end calculation
 const MAX_SHARECOIN_SUPPLY = 21_000_000; // for demonstration
+
+// The special “owner” address that should see the Withdraw button
+const HARD_CODED_OWNER_ADDRESS = "0xc97da6E2EB93963Bde491568b99C84385481D75A";
 
 /** === Main Page Component === **/
 export default function Page() {
@@ -99,7 +105,7 @@ export default function Page() {
   // On-chain stats
   const [onChainBlockCount, setOnChainBlockCount] = useState(0);
 
-  // “Network Stats”
+  // “Network” stats
   const [networkHashRate, setNetworkHashRate] = useState("0 MH/s");
   const [averageBlockTime, setAverageBlockTime] = useState("N/A");
 
@@ -120,7 +126,7 @@ export default function Page() {
   const [remainingToMine, setRemainingToMine] = useState("0");
 
   /************************************************
-   *  NEW: Owner Check State
+   *  NEW: Owner Check
    ***********************************************/
   const [isOwner, setIsOwner] = useState(false);
 
@@ -149,25 +155,19 @@ export default function Page() {
   }, []);
 
   /************************************************
-   *  NEW: Check if the connected account is the owner
+   *  D) Check if connected wallet is special “owner” address
    ***********************************************/
   useEffect(() => {
-    async function checkOwner() {
-      if (!account) return;
-      try {
-        const provider = new ethers.BrowserProvider((window as any).ethereum);
-        const shareCoin = new ethers.Contract(SHARECOIN_ADDRESS, SHARECOIN_ABI, provider);
-        const ownerAddress = await shareCoin.owner();
-        setIsOwner(account.toLowerCase() === ownerAddress.toLowerCase());
-      } catch (error) {
-        console.error("Error checking owner:", error);
-      }
+    if (!account) {
+      setIsOwner(false);
+      return;
     }
-    checkOwner();
+    // Compare ignoring case
+    setIsOwner(account.toLowerCase() === HARD_CODED_OWNER_ADDRESS.toLowerCase());
   }, [account]);
 
   /************************************************
-   *  D) Load On-Chain Subscription Info
+   *  E) Load On-Chain Subscription Info
    ***********************************************/
   async function loadSubscriptionInfo() {
     try {
@@ -189,7 +189,7 @@ export default function Page() {
     }
   }
 
-  // On mount or when account changes, load subscription & balances
+  // Load subscription & balances when account changes
   useEffect(() => {
     if (account) {
       loadSubscriptionInfo();
@@ -200,7 +200,7 @@ export default function Page() {
   }, [account]);
 
   /************************************************
-   *  E) Subscription Countdown
+   *  F) Subscription Countdown
    ***********************************************/
   useEffect(() => {
     if (!expiryTimestamp) {
@@ -212,6 +212,7 @@ export default function Page() {
       setTimeLeftDisplay("Lifetime");
       return;
     }
+
     const timer = setInterval(() => {
       const nowSec = Math.floor(Date.now() / 1000);
       const diff = expiryTimestamp - nowSec;
@@ -222,11 +223,12 @@ export default function Page() {
         setTimeLeftDisplay(formatTimeLeft(diff));
       }
     }, 1000);
+
     return () => clearInterval(timer);
   }, [expiryTimestamp, userPlanEnum]);
 
   /************************************************
-   *  F) Refresh User Balance
+   *  G) Refresh User Balance
    ***********************************************/
   async function refreshUserBalance() {
     if (!account) return;
@@ -241,7 +243,7 @@ export default function Page() {
   }
 
   /************************************************
-   *  G) On-Chain Block Count
+   *  H) On-Chain Block Count
    ***********************************************/
   async function refreshOnChainBlockCount() {
     try {
@@ -255,7 +257,7 @@ export default function Page() {
   }
 
   /************************************************
-   *  H) Compute Price for Subscription
+   *  I) Compute Price for Subscription
    ***********************************************/
   useEffect(() => {
     function computePriceDisplay() {
@@ -271,7 +273,7 @@ export default function Page() {
   }, [selectedPlan, selectedDuration]);
 
   /************************************************
-   *  I) Purchase Subscription
+   *  J) Purchase Subscription
    ***********************************************/
   async function handleSubscribe() {
     if (!account) {
@@ -279,6 +281,7 @@ export default function Page() {
       return;
     }
     setStatusMessage("Approving payment...");
+
     try {
       const provider = new ethers.BrowserProvider((window as any).ethereum);
       const signer = await provider.getSigner();
@@ -299,6 +302,7 @@ export default function Page() {
       }
       toast.success("Subscription purchased successfully!");
       setStatusMessage("Subscription purchased successfully!");
+
       loadSubscriptionInfo();
       refreshUserBalance();
       refreshContractTotals();
@@ -309,7 +313,7 @@ export default function Page() {
   }
 
   /************************************************
-   *  J) Poll the Node Server for Mining Stats
+   *  K) Poll the Node Server for Mining Stats
    ***********************************************/
   useEffect(() => {
     const interval = setInterval(async () => {
@@ -330,7 +334,7 @@ export default function Page() {
   }, [account]);
 
   /************************************************
-   *  K) Start/Stop Mining (server-based)
+   *  L) Start/Stop Mining (server-based)
    ***********************************************/
   async function handleStartMining() {
     if (!account) {
@@ -380,7 +384,7 @@ export default function Page() {
   }
 
   /************************************************
-   *  L) Submit & Mint (on-chain)
+   *  M) Submit & Mint (on-chain)
    ***********************************************/
   async function handleBatchSubmit() {
     if (!pendingBlocks.length) {
@@ -392,6 +396,7 @@ export default function Page() {
       const provider = new ethers.BrowserProvider((window as any).ethereum);
       const signer = await provider.getSigner();
       const shareCoin = new ethers.Contract(SHARECOIN_ADDRESS, SHARECOIN_ABI, signer);
+
       const blockNumbers = pendingBlocks.map((b) => b.blockNumber);
       const nonces = pendingBlocks.map((b) => b.nonce);
 
@@ -399,6 +404,7 @@ export default function Page() {
       const tx = await shareCoin.submitMultipleMinedBlocksAndMint(blockNumbers, nonces);
       await tx.wait();
       toast.success("Batch blocks submitted & minted!");
+
       setPendingBlocks([]);
 
       // Clear them from the server side
@@ -408,6 +414,7 @@ export default function Page() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
+
       refreshUserBalance();
     } catch (err: any) {
       console.error("handleBatchSubmit error:", err);
@@ -418,7 +425,7 @@ export default function Page() {
   }
 
   /************************************************
-   *  M) “Network” Stats
+   *  N) “Network” Stats
    ***********************************************/
   // 1) Poll /networkHashRate
   useEffect(() => {
@@ -446,7 +453,8 @@ export default function Page() {
         setAverageBlockTime("Error");
       }
     }, 15000);
-    // Initial immediate fetch
+
+    // immediate fetch on mount
     (async () => {
       try {
         const res = await fetch(`${MINING_SERVER_URL}/averageBlockTime`);
@@ -457,13 +465,9 @@ export default function Page() {
         setAverageBlockTime("Error");
       }
     })();
+
     return () => clearInterval(timer);
   }, []);
-
-  /************************************************
-   *  N) Modal State for “How to Run Miner?”
-   ***********************************************/
-  const [showHelpModal, setShowHelpModal] = useState(false);
 
   /************************************************
    *  O) Refresh Contract Totals
@@ -489,12 +493,12 @@ export default function Page() {
    ***********************************************/
   async function handleWithdrawFunds() {
     try {
+      // This will only be shown if isOwner === true, i.e. user = HARD_CODED_OWNER_ADDRESS
       const provider = new ethers.BrowserProvider((window as any).ethereum);
       const signer = await provider.getSigner();
       const shareCoin = new ethers.Contract(SHARECOIN_ADDRESS, SHARECOIN_ABI, signer);
 
-      // 1) We can read how much DAI is in the contract if needed,
-      // or just define an amount. We'll withdraw "everything" by reading contract's DAI balance:
+      // 1) Read how much DAI is in the contract
       const paymentToken = new ethers.Contract(PAYMENT_TOKEN_ADDRESS, ERC20_ABI, provider);
       const contractBalanceBN = await paymentToken.balanceOf(SHARECOIN_ADDRESS);
       if (contractBalanceBN === 0n) {
@@ -514,7 +518,12 @@ export default function Page() {
   }
 
   /************************************************
-   *  Q) Render
+   *  Q) Modal State for “How to Run Miner?”
+   ***********************************************/
+  const [showHelpModal, setShowHelpModal] = useState(false);
+
+  /************************************************
+   *  R) Render
    ***********************************************/
   const planName = getPlanName(userPlanEnum);
 
@@ -527,7 +536,6 @@ export default function Page() {
 
       {/* Main Container: single column on small screens, 3 columns on md+ */}
       <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6 justify-items-center">
-
         {/* === Panel 1: On-Chain Subscription Info === */}
         <div className="bg-[#111] w-full p-4 rounded shadow col-span-1">
           <h2 className="text-center text-2xl mb-4 text-[#ffc107]">
@@ -716,7 +724,7 @@ export default function Page() {
         </div>
       </div>
 
-      {/* Owner-only Withdraw Funds Button */}
+      {/* Only show "Withdraw" button if user's account is the special address */}
       {isOwner && (
         <div className="mt-4 flex justify-center">
           <button
@@ -749,15 +757,15 @@ export default function Page() {
               2. Click "Start Mining" in the Mining Controls panel.<br />
               3. Wait for blocks to appear under "Unclaimed Blocks".<br />
               4. Submit them to claim your rewards..<br />
-              5. Buy a Cloud Mining Subscription—Click it & Forget it. 
-                 Coins will be deposited in your wallet; we run a mint function 
-                 to all blocks found every hour. You can mint your found blocks 
+              5. Buy a Cloud Mining Subscription—Click it & Forget it.
+                 Coins will be deposited in your wallet; we run a mint function
+                 for all blocks found every hour. You can mint your found blocks
                  or allow the server to mint them.<br />
               6. 21,000,000 SHARE coins total supply, 50 SHARE per each block found.<br />
               7. ShareCoin is a Meme Coin and has no value when mined, 
-                 other than as a Collector’s Item.<br />
+                 other than as a collector’s item.<br />
               General Info:<br />
-              10. No mining equipment is required; all mining hash is done on 
+              10. No mining equipment is required; all mining hash is done on
                   the cloud server. Have Fun Mining!
             </p>
             <button

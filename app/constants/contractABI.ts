@@ -36,6 +36,9 @@ export const SHARECOIN_ABI = [
   "function claimMultipleRewards(uint256[] calldata indexes) external",
   "function getBlockHistoryLength() view returns (uint256)",
 
+  // Owner function from OpenZeppelin’s Ownable:
+  "function owner() view returns (address)",    // ← add this line
+
   // Owner operations
   "function ownerWithdrawSubscriptionFunds(uint256 amount) external",
   "function setDifficulty(uint256 newDifficulty) external",
