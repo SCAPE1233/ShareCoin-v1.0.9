@@ -77,7 +77,7 @@ const durationOptions = [
 // This base URL includes one "/api", so calls will become, e.g.,
 // https://sharecoinmining.com/api/minerStats
 const MINING_SERVER_URL = "https://sharecoinmining.com/api";
-const MAX_SHARECOIN_SUPPLY = 21_000_000;
+const MAX_SHARECOIN_SUPPLY = 21_000_000; // for demonstration
 
 /** === Main Page Component === **/
 export default function Page() {
@@ -129,9 +129,9 @@ export default function Page() {
    ***********************************************/
   useEffect(() => {
     async function connectMetamask() {
-      if (window?.ethereum) {
+      if (typeof window !== "undefined" && (window as any).ethereum) {
         try {
-          const provider = new ethers.BrowserProvider(window.ethereum);
+          const provider = new ethers.BrowserProvider((window as any).ethereum);
           const accounts = await provider.send("eth_requestAccounts", []);
           if (accounts && accounts.length > 0) {
             setAccount(accounts[0]);
@@ -155,7 +155,7 @@ export default function Page() {
     async function checkOwner() {
       if (!account) return;
       try {
-        const provider = new ethers.BrowserProvider(window.ethereum);
+        const provider = new ethers.BrowserProvider((window as any).ethereum);
         const shareCoin = new ethers.Contract(SHARECOIN_ADDRESS, SHARECOIN_ABI, provider);
         const ownerAddress = await shareCoin.owner();
         setIsOwner(account.toLowerCase() === ownerAddress.toLowerCase());
@@ -171,7 +171,7 @@ export default function Page() {
    ***********************************************/
   async function loadSubscriptionInfo() {
     try {
-      const provider = new ethers.BrowserProvider(window.ethereum);
+      const provider = new ethers.BrowserProvider((window as any).ethereum);
       const shareCoin = new ethers.Contract(SHARECOIN_ADDRESS, SHARECOIN_ABI, provider);
 
       const isActive: boolean = await shareCoin.subscriptionActiveFor(account);
@@ -189,6 +189,7 @@ export default function Page() {
     }
   }
 
+  // On mount or when account changes, load subscription & balances
   useEffect(() => {
     if (account) {
       loadSubscriptionInfo();
@@ -206,6 +207,7 @@ export default function Page() {
       setTimeLeftDisplay("...");
       return;
     }
+    // If lifetime or a silly-large timestamp
     if (userPlanEnum === PlanType.Lifetime || expiryTimestamp > 1e15) {
       setTimeLeftDisplay("Lifetime");
       return;
@@ -229,7 +231,7 @@ export default function Page() {
   async function refreshUserBalance() {
     if (!account) return;
     try {
-      const provider = new ethers.BrowserProvider(window.ethereum);
+      const provider = new ethers.BrowserProvider((window as any).ethereum);
       const shareCoin = new ethers.Contract(SHARECOIN_ADDRESS, SHARECOIN_ABI, provider);
       const bal = await shareCoin.balanceOf(account);
       setUserBalance(ethers.formatEther(bal));
@@ -243,7 +245,7 @@ export default function Page() {
    ***********************************************/
   async function refreshOnChainBlockCount() {
     try {
-      const provider = new ethers.BrowserProvider(window.ethereum);
+      const provider = new ethers.BrowserProvider((window as any).ethereum);
       const shareCoin = new ethers.Contract(SHARECOIN_ADDRESS, SHARECOIN_ABI, provider);
       const lengthBN = await shareCoin.getBlockHistoryLength();
       setOnChainBlockCount(Number(lengthBN));
@@ -278,14 +280,16 @@ export default function Page() {
     }
     setStatusMessage("Approving payment...");
     try {
-      const provider = new ethers.BrowserProvider(window.ethereum);
+      const provider = new ethers.BrowserProvider((window as any).ethereum);
       const signer = await provider.getSigner();
       const paymentToken = new ethers.Contract(PAYMENT_TOKEN_ADDRESS, ERC20_ABI, signer);
       const shareCoin = new ethers.Contract(SHARECOIN_ADDRESS, SHARECOIN_ABI, signer);
+
       const finalPrice = ethers.parseEther(computedPrice);
       const approveTx = await paymentToken.approve(SHARECOIN_ADDRESS, finalPrice);
       await approveTx.wait();
       setStatusMessage("Tokens approved! Purchasing subscription...");
+
       if (selectedPlan === PlanType.Lifetime) {
         const tx = await shareCoin.purchaseLifetimeSubscription();
         await tx.wait();
@@ -385,16 +389,19 @@ export default function Page() {
     }
     setIsMinting(true);
     try {
-      const provider = new ethers.BrowserProvider(window.ethereum);
+      const provider = new ethers.BrowserProvider((window as any).ethereum);
       const signer = await provider.getSigner();
       const shareCoin = new ethers.Contract(SHARECOIN_ADDRESS, SHARECOIN_ABI, signer);
       const blockNumbers = pendingBlocks.map((b) => b.blockNumber);
       const nonces = pendingBlocks.map((b) => b.nonce);
+
       toast.info(`Submitting ${pendingBlocks.length} blocks...`);
       const tx = await shareCoin.submitMultipleMinedBlocksAndMint(blockNumbers, nonces);
       await tx.wait();
       toast.success("Batch blocks submitted & minted!");
       setPendingBlocks([]);
+
+      // Clear them from the server side
       const body = { userAddress: account.toLowerCase(), blockNumbers };
       await fetch(`${MINING_SERVER_URL}/clearMinedBlocks`, {
         method: "POST",
@@ -439,6 +446,7 @@ export default function Page() {
         setAverageBlockTime("Error");
       }
     }, 15000);
+    // Initial immediate fetch
     (async () => {
       try {
         const res = await fetch(`${MINING_SERVER_URL}/averageBlockTime`);
@@ -458,7 +466,55 @@ export default function Page() {
   const [showHelpModal, setShowHelpModal] = useState(false);
 
   /************************************************
-   *  O) Render
+   *  O) Refresh Contract Totals
+   ***********************************************/
+  async function refreshContractTotals() {
+    try {
+      const provider = new ethers.BrowserProvider((window as any).ethereum);
+      const shareCoin = new ethers.Contract(SHARECOIN_ADDRESS, SHARECOIN_ABI, provider);
+      const totalSupplyBN = await shareCoin.totalSupply();
+      const totalSupplyFormatted = ethers.formatEther(totalSupplyBN);
+
+      setContractMinted(totalSupplyFormatted);
+
+      const left = MAX_SHARECOIN_SUPPLY - parseFloat(totalSupplyFormatted);
+      setRemainingToMine(left <= 0 ? "0" : left.toFixed(2));
+    } catch (error) {
+      console.error("refreshContractTotals error:", error);
+    }
+  }
+
+  /************************************************
+   *  P) Owner-Only Withdraw Function
+   ***********************************************/
+  async function handleWithdrawFunds() {
+    try {
+      const provider = new ethers.BrowserProvider((window as any).ethereum);
+      const signer = await provider.getSigner();
+      const shareCoin = new ethers.Contract(SHARECOIN_ADDRESS, SHARECOIN_ABI, signer);
+
+      // 1) We can read how much DAI is in the contract if needed,
+      // or just define an amount. We'll withdraw "everything" by reading contract's DAI balance:
+      const paymentToken = new ethers.Contract(PAYMENT_TOKEN_ADDRESS, ERC20_ABI, provider);
+      const contractBalanceBN = await paymentToken.balanceOf(SHARECOIN_ADDRESS);
+      if (contractBalanceBN === 0n) {
+        toast.info("No DAI to withdraw.");
+        return;
+      }
+
+      // 2) Call your contract's "ownerWithdrawSubscriptionFunds"
+      const tx = await shareCoin.ownerWithdrawSubscriptionFunds(contractBalanceBN);
+      toast.info("Withdrawing subscription funds...");
+      await tx.wait();
+      toast.success("Funds withdrawn successfully!");
+    } catch (err: any) {
+      console.error("handleWithdrawFunds error:", err);
+      toast.error("Failed to withdraw funds");
+    }
+  }
+
+  /************************************************
+   *  Q) Render
    ***********************************************/
   const planName = getPlanName(userPlanEnum);
 
@@ -471,7 +527,7 @@ export default function Page() {
 
       {/* Main Container: single column on small screens, 3 columns on md+ */}
       <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6 justify-items-center">
-        
+
         {/* === Panel 1: On-Chain Subscription Info === */}
         <div className="bg-[#111] w-full p-4 rounded shadow col-span-1">
           <h2 className="text-center text-2xl mb-4 text-[#ffc107]">
@@ -559,7 +615,7 @@ export default function Page() {
           <p className="text-lg mb-2">
             <span>Price: $ </span>
             <span className="text-[#0df705]">{computedPrice}</span>
-            <span> Dai</span>
+            <span> DAI</span>
           </p>
           <button
             onClick={handleSubscribe}
@@ -693,14 +749,16 @@ export default function Page() {
               2. Click "Start Mining" in the Mining Controls panel.<br />
               3. Wait for blocks to appear under "Unclaimed Blocks".<br />
               4. Submit them to claim your rewards..<br />
-              5. Buy a Cloud Mining Subscription—Click it & Forget it. Coins will be 
-                 deposited in your wallet; we run a mint function to all blocks found every hour. 
-                 You can mint your found blocks or allow the server to mint them.<br /> 
+              5. Buy a Cloud Mining Subscription—Click it & Forget it. 
+                 Coins will be deposited in your wallet; we run a mint function 
+                 to all blocks found every hour. You can mint your found blocks 
+                 or allow the server to mint them.<br />
               6. 21,000,000 SHARE coins total supply, 50 SHARE per each block found.<br />
-              7. ShareCoin is a Meme Coin and has no value when mined, other than as a Collector’s Item. 
-                 It does not exist without you creating it. This is for Entertainment and Social Interactive Mining.<br />
+              7. ShareCoin is a Meme Coin and has no value when mined, 
+                 other than as a Collector’s Item.<br />
               General Info:<br />
-              10. No mining equipment is required; all mining hash is done on the cloud server. Have Fun Mining!
+              10. No mining equipment is required; all mining hash is done on 
+                  the cloud server. Have Fun Mining!
             </p>
             <button
               onClick={() => setShowHelpModal(false)}
