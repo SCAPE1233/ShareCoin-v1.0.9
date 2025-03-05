@@ -65,7 +65,8 @@ function formatTimeLeft(seconds: number): string {
 }
 
 /** === 2) Constants === **/
-// The base URL includes one "/api"
+// For lifetime subscription, note: this value is used in the front end calculations,
+// but the actual cost is hardcoded in your contract. They must match.
 const lifetimePrice = 8000;
 const durationOptions = [
   { label: "3 days", value: 3 },
@@ -73,6 +74,8 @@ const durationOptions = [
   { label: "30 days", value: 30 },
   { label: "90 days", value: 90 },
 ];
+// This base URL includes one "/api", so calls will become, e.g.,
+// https://sharecoinmining.com/api/minerStats
 const MINING_SERVER_URL = "https://sharecoinmining.com/api";
 const MAX_SHARECOIN_SUPPLY = 21_000_000;
 
@@ -116,32 +119,10 @@ export default function Page() {
   const [contractMinted, setContractMinted] = useState("0");
   const [remainingToMine, setRemainingToMine] = useState("0");
 
-  /** Fetch total minted & leftover supply. */
-  async function refreshContractTotals() {
-    try {
-      if (!window.ethereum) return;
-
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const shareCoin = new ethers.Contract(SHARECOIN_ADDRESS, SHARECOIN_ABI, provider);
-
-      // totalSupply is a BigInt
-      const supplyBig = await shareCoin.totalSupply();
-      const supplyNumber = Number(ethers.formatEther(supplyBig));
-
-      // Format minted with commas
-      const minted = supplyNumber.toLocaleString(undefined, { minimumFractionDigits: 2 });
-      setContractMinted(minted);
-
-      // leftover
-      const leftover = MAX_SHARECOIN_SUPPLY - supplyNumber;
-      const leftoverStr = leftover.toLocaleString(undefined, { minimumFractionDigits: 2 });
-      setRemainingToMine(leftoverStr);
-    } catch (err) {
-      console.error("refreshContractTotals error:", err);
-      setContractMinted("Error");
-      setRemainingToMine("Error");
-    }
-  }
+  /************************************************
+   *  NEW: Owner Check State
+   ***********************************************/
+  const [isOwner, setIsOwner] = useState(false);
 
   /************************************************
    *  C) Connect MetaMask on Mount
@@ -166,6 +147,24 @@ export default function Page() {
     }
     connectMetamask();
   }, []);
+
+  /************************************************
+   *  NEW: Check if the connected account is the owner
+   ***********************************************/
+  useEffect(() => {
+    async function checkOwner() {
+      if (!account) return;
+      try {
+        const provider = new ethers.BrowserProvider(window.ethereum);
+        const shareCoin = new ethers.Contract(SHARECOIN_ADDRESS, SHARECOIN_ABI, provider);
+        const ownerAddress = await shareCoin.owner();
+        setIsOwner(account.toLowerCase() === ownerAddress.toLowerCase());
+      } catch (error) {
+        console.error("Error checking owner:", error);
+      }
+    }
+    checkOwner();
+  }, [account]);
 
   /************************************************
    *  D) Load On-Chain Subscription Info
@@ -211,7 +210,6 @@ export default function Page() {
       setTimeLeftDisplay("Lifetime");
       return;
     }
-
     const timer = setInterval(() => {
       const nowSec = Math.floor(Date.now() / 1000);
       const diff = expiryTimestamp - nowSec;
@@ -222,7 +220,6 @@ export default function Page() {
         setTimeLeftDisplay(formatTimeLeft(diff));
       }
     }, 1000);
-
     return () => clearInterval(timer);
   }, [expiryTimestamp, userPlanEnum]);
 
@@ -234,7 +231,6 @@ export default function Page() {
     try {
       const provider = new ethers.BrowserProvider(window.ethereum);
       const shareCoin = new ethers.Contract(SHARECOIN_ADDRESS, SHARECOIN_ABI, provider);
-
       const bal = await shareCoin.balanceOf(account);
       setUserBalance(ethers.formatEther(bal));
     } catch (err) {
@@ -249,7 +245,6 @@ export default function Page() {
     try {
       const provider = new ethers.BrowserProvider(window.ethereum);
       const shareCoin = new ethers.Contract(SHARECOIN_ADDRESS, SHARECOIN_ABI, provider);
-
       const lengthBN = await shareCoin.getBlockHistoryLength();
       setOnChainBlockCount(Number(lengthBN));
     } catch (err) {
@@ -282,19 +277,15 @@ export default function Page() {
       return;
     }
     setStatusMessage("Approving payment...");
-
     try {
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
       const paymentToken = new ethers.Contract(PAYMENT_TOKEN_ADDRESS, ERC20_ABI, signer);
       const shareCoin = new ethers.Contract(SHARECOIN_ADDRESS, SHARECOIN_ABI, signer);
-
       const finalPrice = ethers.parseEther(computedPrice);
       const approveTx = await paymentToken.approve(SHARECOIN_ADDRESS, finalPrice);
       await approveTx.wait();
-
       setStatusMessage("Tokens approved! Purchasing subscription...");
-
       if (selectedPlan === PlanType.Lifetime) {
         const tx = await shareCoin.purchaseLifetimeSubscription();
         await tx.wait();
@@ -302,10 +293,8 @@ export default function Page() {
         const tx = await shareCoin.purchaseSubscription(selectedPlan, selectedDuration);
         await tx.wait();
       }
-
       toast.success("Subscription purchased successfully!");
       setStatusMessage("Subscription purchased successfully!");
-
       loadSubscriptionInfo();
       refreshUserBalance();
       refreshContractTotals();
@@ -322,7 +311,6 @@ export default function Page() {
     const interval = setInterval(async () => {
       if (!account) return;
       try {
-        // No extra "/api" here
         const res = await fetch(`${MINING_SERVER_URL}/minerStats?userAddress=${account}`);
         const data = await res.json();
         setMinerActive(data.active);
@@ -351,8 +339,6 @@ export default function Page() {
     }
     try {
       const body = { userAddress: account, plan: Number(userPlanEnum) };
-
-      // Only "/startMining", not "/api/startMining"
       const res = await fetch(`${MINING_SERVER_URL}/startMining`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -374,7 +360,6 @@ export default function Page() {
       return;
     }
     try {
-      // POST /stopMining
       const res = await fetch(`${MINING_SERVER_URL}/stopMining`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -403,25 +388,19 @@ export default function Page() {
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
       const shareCoin = new ethers.Contract(SHARECOIN_ADDRESS, SHARECOIN_ABI, signer);
-
       const blockNumbers = pendingBlocks.map((b) => b.blockNumber);
       const nonces = pendingBlocks.map((b) => b.nonce);
-
       toast.info(`Submitting ${pendingBlocks.length} blocks...`);
       const tx = await shareCoin.submitMultipleMinedBlocksAndMint(blockNumbers, nonces);
       await tx.wait();
-
       toast.success("Batch blocks submitted & minted!");
-
       setPendingBlocks([]);
       const body = { userAddress: account.toLowerCase(), blockNumbers };
-      // Clear mined blocks
       await fetch(`${MINING_SERVER_URL}/clearMinedBlocks`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-
       refreshUserBalance();
     } catch (err: any) {
       console.error("handleBatchSubmit error:", err);
@@ -445,7 +424,6 @@ export default function Page() {
         console.error("Failed to fetch network hash rate:", err);
       }
     }, 15000);
-
     return () => clearInterval(timer);
   }, [onChainBlockCount]);
 
@@ -461,8 +439,6 @@ export default function Page() {
         setAverageBlockTime("Error");
       }
     }, 15000);
-
-    // initial fetch
     (async () => {
       try {
         const res = await fetch(`${MINING_SERVER_URL}/averageBlockTime`);
@@ -473,7 +449,6 @@ export default function Page() {
         setAverageBlockTime("Error");
       }
     })();
-
     return () => clearInterval(timer);
   }, []);
 
@@ -502,8 +477,6 @@ export default function Page() {
           <h2 className="text-center text-2xl mb-4 text-[#ffc107]">
             Mining Contract & Wallet Balance
           </h2>
-
-          {/* Truncate account if >30 chars */}
           <p className="text-lg mb-2">
             <span>Account: </span>
             <span className="text-[#0df705]">
@@ -514,7 +487,6 @@ export default function Page() {
                 : "Not connected"}
             </span>
           </p>
-
           <p className="text-lg mb-2">
             <span>Plan: </span>
             <span className="text-[#0df705]">{planName}</span>
@@ -533,7 +505,6 @@ export default function Page() {
             <span>SHARE Balance: </span>
             <span className="text-[#0df705]">{userBalance}</span>
           </p>
-
           <button
             onClick={() => {
               refreshUserBalance();
@@ -543,8 +514,6 @@ export default function Page() {
           >
             Refresh Balance
           </button>
-
-          {/* Minted & leftover */}
           <p className="text-lg mt-3">
             <span>Share Amount Minted: </span>
             <span className="text-[#0df705]">{contractMinted}</span>
@@ -560,7 +529,6 @@ export default function Page() {
           <h2 className="text-center text-2xl mb-4 text-[#ffc107]">
             Cloud Mining Contract
           </h2>
-
           <p className="text-lg">Contract to Buy:</p>
           <select
             value={selectedPlan}
@@ -572,7 +540,6 @@ export default function Page() {
             <option value={PlanType.Premium}>Premium (5000 H/s)</option>
             <option value={PlanType.Lifetime}>Lifetime (5555 H/s)</option>
           </select>
-
           {selectedPlan !== PlanType.Lifetime && (
             <>
               <p className="text-lg">Duration (Days):</p>
@@ -589,20 +556,17 @@ export default function Page() {
               </select>
             </>
           )}
-
           <p className="text-lg mb-2">
             <span>Price: $ </span>
             <span className="text-[#0df705]">{computedPrice}</span>
             <span> Dai</span>
           </p>
-
           <button
             onClick={handleSubscribe}
             className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded mr-2"
           >
             Purchase
           </button>
-
           {statusMessage && (
             <p className="text-lg mt-2 text-white">{statusMessage}</p>
           )}
@@ -627,7 +591,6 @@ export default function Page() {
             <span>Valid Block Attempts: </span>
             <span className="text-[#0df705]">{hashAttempts}</span>
           </p>
-
           {!minerActive ? (
             <button
               onClick={handleStartMining}
@@ -643,7 +606,6 @@ export default function Page() {
               Stop Mining
             </button>
           )}
-
           <h3 className="text-xl mt-4 mb-2 text-[#ffc107]">
             ShareCoin Chain Stats
           </h3>
@@ -651,15 +613,10 @@ export default function Page() {
             <span>Block Height: </span>
             <span className="text-[#0df705]">{onChainBlockCount}</span>
           </p>
-
-          {/* Flicker approach for user’s personal plan & active status */}
           <FlickerHashRate plan={userPlanEnum} minerActive={minerActive} />
-
-          {/* Average Block Time */}
           <div className="mt-4">
             <AverageBlockTime />
           </div>
-
           <button
             onClick={refreshOnChainBlockCount}
             className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded mt-2"
@@ -677,27 +634,20 @@ export default function Page() {
             <span>Mined Blocks: </span>
             <span className="text-[#0cc91f]">{pendingBlocks.length}</span>
           </p>
-
           {pendingBlocks.map((b, idx) => (
             <div key={idx} className="text-lg mb-2">
               <span>Block # </span>
               <span>{b.blockNumber}</span>
               <span className="text-[#0cc91f]"> : 50</span>
               <span className="text-[#ffff00]"> SHARE</span>
-
               <span> :N </span>
               <span className="text-[#ffff00]">{b.nonce}</span>
-
               <span> :Hash </span>
-              <span className="text-[#0cc91f]">
-                {b.localHash.slice(0, 46)}
-              </span>
-
+              <span className="text-[#0cc91f]">{b.localHash.slice(0, 46)}</span>
               <span> : </span>
               <span>{new Date(b.timestamp).toLocaleString()}</span>
             </div>
           ))}
-
           {pendingBlocks.length > 0 && (
             <button
               onClick={handleBatchSubmit}
@@ -709,6 +659,18 @@ export default function Page() {
           )}
         </div>
       </div>
+
+      {/* Owner-only Withdraw Funds Button */}
+      {isOwner && (
+        <div className="mt-4 flex justify-center">
+          <button
+            onClick={handleWithdrawFunds}
+            className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded"
+          >
+            Withdraw All Funds
+          </button>
+        </div>
+      )}
 
       {/* Footer Buttons */}
       <div className="mt-6 flex justify-center space-x-4">
@@ -726,23 +688,19 @@ export default function Page() {
         <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
           <div className="bg-[#111] text-white p-6 rounded max-w-lg w-full mx-4">
             <h2 className="text-2xl mb-4">ShareCoin Mining Info</h2>
-            <p className="text-lg mb-3 leading-relaxed">
+            <p className="text-sm mb-3 leading-relaxed">
               1. Make sure you have a subscription active.<br />
               2. Click "Start Mining" in the Mining Controls panel.<br />
               3. Wait for blocks to appear under "Unclaimed Blocks".<br />
               4. Submit them to claim your rewards..<br />
-              5. Buy a Cloud Mining Subscription Click it & Forget it.. Coins will be 
-                 deposited in your wallet we run a mint function to all 
-                 blocks Found every Hour. You can mint your found blocks or allow
-                 Server to mint them. <br /> 
-              6. 21,000,000 SHARE coins total supply 50 SHARE per each Block found.<br />
-              7. ShareCoin is a Meme Coin and has no value when mined other 
-                 than Collectors Item.. It does not exist without you creating it.. 
-                 You will (mine it).. This is for Entertainment and 
-                 Social Interactive Mining.. <br />
+              5. Buy a Cloud Mining Subscription—Click it & Forget it. Coins will be 
+                 deposited in your wallet; we run a mint function to all blocks found every hour. 
+                 You can mint your found blocks or allow the server to mint them.<br /> 
+              6. 21,000,000 SHARE coins total supply, 50 SHARE per each block found.<br />
+              7. ShareCoin is a Meme Coin and has no value when mined, other than as a Collector’s Item. 
+                 It does not exist without you creating it. This is for Entertainment and Social Interactive Mining.<br />
               General Info:<br />
-              10. No mining equipment is required all mining Hash is done in the cloud 
-                 server.  Have Fun Mining! <br />
+              10. No mining equipment is required; all mining hash is done on the cloud server. Have Fun Mining!
             </p>
             <button
               onClick={() => setShowHelpModal(false)}
@@ -758,4 +716,3 @@ export default function Page() {
     </div>
   );
 }
-
